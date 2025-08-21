@@ -1,0 +1,3 @@
+/Users/jemilpatel/Documents/Projects/Order Book Simulation/build/CMakeFiles/simulator.dir
+/Users/jemilpatel/Documents/Projects/Order Book Simulation/build/CMakeFiles/edit_cache.dir
+/Users/jemilpatel/Documents/Projects/Order Book Simulation/build/CMakeFiles/rebuild_cache.dir
