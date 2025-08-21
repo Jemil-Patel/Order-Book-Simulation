@@ -129,6 +129,30 @@ simulator/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/simulator.dir/build.make CMakeFiles/simulator.dir/build
 .PHONY : simulator/fast
 
+src/Metrics.o: src/Metrics.cpp.o
+.PHONY : src/Metrics.o
+
+# target to build an object file
+src/Metrics.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/simulator.dir/build.make CMakeFiles/simulator.dir/src/Metrics.cpp.o
+.PHONY : src/Metrics.cpp.o
+
+src/Metrics.i: src/Metrics.cpp.i
+.PHONY : src/Metrics.i
+
+# target to preprocess a source file
+src/Metrics.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/simulator.dir/build.make CMakeFiles/simulator.dir/src/Metrics.cpp.i
+.PHONY : src/Metrics.cpp.i
+
+src/Metrics.s: src/Metrics.cpp.s
+.PHONY : src/Metrics.s
+
+# target to generate assembly for a file
+src/Metrics.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/simulator.dir/build.make CMakeFiles/simulator.dir/src/Metrics.cpp.s
+.PHONY : src/Metrics.cpp.s
+
 src/Order.o: src/Order.cpp.o
 .PHONY : src/Order.o
 
@@ -234,6 +258,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... simulator"
+	@echo "... src/Metrics.o"
+	@echo "... src/Metrics.i"
+	@echo "... src/Metrics.s"
 	@echo "... src/Order.o"
 	@echo "... src/Order.i"
 	@echo "... src/Order.s"

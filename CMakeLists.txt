@@ -16,6 +16,7 @@ set(SOURCES
     src/Order.cpp
     src/OrderBook.cpp
     src/Utils.cpp
+    src/Metrics.cpp
 )
 
 # Executable

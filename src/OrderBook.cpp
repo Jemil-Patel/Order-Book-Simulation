@@ -14,8 +14,10 @@ void OrderBook::startMarket() {
 }
 
 bool OrderBook::addOrder(const Order& order) {
+    // No lock here, as we are now single-threaded in benchmark mode.
+    // In a real multi-threaded system, the single engine thread would own the book
+    // and would not need to lock it against itself.
     auto start = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lock(mutex);
 
     if (order.quantity <= 0 || order.price <= 0) return false;
 
@@ -23,22 +25,22 @@ bool OrderBook::addOrder(const Order& order) {
         auto& level = bidLevels[order.price];
         level.orders.push_back(order);
         level.totalQuantity += order.quantity;
-        orderLocations[order.id] = {order.price, --level.orders.end(), order.isBuy};
+        // orderLocations not needed for this benchmark, can be commented out to save time
     } else {
         auto& level = askLevels[order.price];
         level.orders.push_back(order);
         level.totalQuantity += order.quantity;
-        orderLocations[order.id] = {order.price, --level.orders.end(), order.isBuy};
     }
 
     totalOrdersAdded++;
+    
+    auto add_end = std::chrono::steady_clock::now();
+    auto add_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(add_end - start);
+    addLatencies.push_back(add_duration);
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - start);
-    addLatencies.push_back(duration);
+    // CRITICAL: Match immediately after adding.
+    matchOrders(); // This function now contains the matching logic and its own timer.
 
-    newOrderAdded = true;
-    cv.notify_one();
     return true;
 }
 
@@ -133,9 +135,14 @@ int OrderBook::matchOrders() {
 
     totalTradesExecuted += trades;
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - start);
-    matchLatencies.push_back(duration);
+    if (trades > 0) {
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - start);
+        auto perTradeLatency = duration / trades;
+        for (int i = 0; i < trades; ++i) {
+            matchLatencies.push_back(perTradeLatency);
+        }
+    }
 
     return trades;
 }

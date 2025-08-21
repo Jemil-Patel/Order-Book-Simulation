@@ -31,9 +31,16 @@ public:
     double getAvgAddLatency() const;
     double getAvgMatchLatency() const;
 
+    int getTotalOrdersAdded() const { return totalOrdersAdded; }
+    int getTotalTradesExecuted() const { return totalTradesExecuted; }
+
     // Get latency vectors for logging/plotting
-    const std::vector<std::chrono::microseconds>& getAddLatencies() const { return addLatencies; }
-    const std::vector<std::chrono::microseconds>& getMatchLatencies() const { return matchLatencies; }
+    // const std::vector<std::chrono::microseconds>& getAddLatencies() const { return addLatencies; }
+    // const std::vector<std::chrono::microseconds>& getMatchLatencies() const { return matchLatencies; }
+    
+    // Change const reference to return by value
+    std::vector<std::chrono::nanoseconds> getAddLatencies() const { return addLatencies; }
+    std::vector<std::chrono::nanoseconds> getMatchLatencies() const { return matchLatencies; }
     
     mutable std::mutex mutex; // Protects book
     std::condition_variable cv; // Signals matcher
@@ -59,8 +66,8 @@ private:
     std::unordered_map<int, OrderLocation> orderLocations; // For fast cancels
 
 
-    std::vector<std::chrono::microseconds> addLatencies; // Tracks add times
-    std::vector<std::chrono::microseconds> matchLatencies; // Tracks match times
+    std::vector<std::chrono::nanoseconds> addLatencies; // Tracks add times
+    std::vector<std::chrono::nanoseconds> matchLatencies; // Tracks match times
 
     std::string lastTrade; // Stores last trade for display
     int totalOrdersAdded = 0; // Counter for all added orders

@@ -1,99 +1,112 @@
 #include "OrderBook.h"
 #include "Utils.h"
+#include "Metrics.h"
 #include <thread>
 #include <atomic>
 #include <chrono>
 #include <random>
 #include <iostream>
-#include <fstream>
+#include <vector> // For the queue
+#include <iomanip> // For std::setprecision
+
+// A simple, single-threaded, non-locking queue for our benchmark
+// In a real system, this would be a more complex lock-free queue.
+#include <queue>
 
 int main(int argc, char* argv[]) {
-    // Parse args: pre-orders count, interval (ms), duration (s)
-    int preOrderCount = (argc > 1) ? std::stoi(argv[1]) : 100;
-    int intervalMs = (argc > 2) ? std::stoi(argv[2]) : 100;
-    int durationSec = (argc > 3) ? std::stoi(argv[3]) : 60;
+    // --- SETUP IS THE SAME ---
+    int preOrderCount = (argc > 1) ? std::stoi(argv[1]) : 10000;
+    int durationSec = (argc > 3) ? std::stoi(argv[3]) : 30;
     
     OrderBook book;
     std::atomic<bool> running(true);
     std::atomic<int> nextId(1);
     std::mt19937 gen(std::random_device{}());
-    
+
+    double midPrice = 2500.0;
+    double volatility = 0.02;
+    double spread = 0.05;
+
+    // --- PRE-LOAD IS THE SAME ---
     for (int i = 0; i < preOrderCount; ++i) {
-        book.addOrder(Utils::generateRandomOrder(nextId++, gen));
+        book.addOrder(Utils::generateRealisticOrder(nextId++, gen, midPrice, volatility, spread));
     }
-    // Lock the book before the initial match
     {
         std::lock_guard<std::mutex> lock(book.mutex);
-        book.matchOrders(); // One final match on the pre-loaded book
+        book.matchOrders();
     }
-    
+    book.startMarket();
     std::cout << "Market opened with " << preOrderCount << " pre-loaded orders\n";
-    book.startMarket(); // clock starts
-    
-    // Generator thread: Add random orders every intervalMs
-    std::thread generator([&]() {
-        while (running) {
-            book.addOrder(Utils::generateRandomOrder(nextId++, gen));
-            std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
+    std::cout << "--- RUNNING IN SINGLE-THREADED BENCHMARK MODE ---\n";
+    std::cout << "Generator will pre-fill a queue, then a single thread will process for " << durationSec << " seconds.\n";
+
+
+    // --- THE ARCHITECTURAL CHANGE ---
+
+    // 1. GENERATOR PHASE: Create a large batch of orders in memory first.
+    // This separates the cost of order *generation* from order *processing*.
+    const int num_orders_to_generate = 10'000'000; // Generate 10 million orders
+    std::vector<Order> order_queue;
+    order_queue.reserve(num_orders_to_generate);
+    std::cout << "Pre-generating " << num_orders_to_generate << " orders for the benchmark...\n";
+    for(int i = 0; i < num_orders_to_generate; ++i) {
+        order_queue.push_back(Utils::generateRealisticOrder(nextId++, gen, midPrice, volatility, spread));
+    }
+    std::cout << "Generation complete. Starting processing benchmark.\n";
+
+    // 2. PROCESSING PHASE: A SINGLE thread processes the queue.
+    // This is the true measure of your engine's performance.
+    std::thread engine_thread([&]() {
+        size_t order_index = 0;
+        while(running && order_index < order_queue.size()) {
+            const Order& order = order_queue[order_index];
+            book.addOrder(order); // This call now also triggers matching internally
+            order_index++;
         }
     });
-    
-    // Matcher thread: Match orders on notification
-    std::thread matcher([&]() {
-        while (running) {
-            std::unique_lock<std::mutex> lock(book.mutex);
-            
-            // 1. Wait until there is work to do.
-            book.cv.wait(lock, [&]() { return !running || book.newOrderAdded; });
-            
-            // 2. If we are just stopping, exit the loop.
-            if (!running) break;
-            
-            // 3. We have work. Reset the flag now that we've acknowledged the signal.
-            book.newOrderAdded = false;
-            
-            // 4. Perform the matching. The lock is still held by 'lock'.
-            book.matchOrders();
-            
-            // 5. The lock is automatically released here when unique_lock goes out of scope.
-        }
-    });
-    
-    // Display thread: Show book and latencies every 500ms
-    std::thread displayer([&]() {
-        while (running) {
-            book.display();
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-    });
-    
-    // Run for duration, then stop
+
+    // 3. RUN and CLEANUP
     std::this_thread::sleep_for(std::chrono::seconds(durationSec));
     running = false;
-    
-    // Signal matcher to wake and exit
-    book.cv.notify_one();
-    
-    // Cleanup
-    generator.join();
-    matcher.join();
-    displayer.join();
+
+    engine_thread.join();
     
     // No final book.display() to avoid double output
     std::cout << "Simulation ended. Final book state shown above.\n";
     
-    // Log latencies to CSV for plotting
-    std::ofstream addCsv("add_latencies.csv");
-    for (const auto& d : book.getAddLatencies()) {
-        addCsv << d.count() << "\n";
-    }
-    addCsv.close();
+    // --- FINAL METRICS CALCULATION ---
+    auto totalOrders = book.getTotalOrdersAdded();
+    auto totalTrades = book.getTotalTradesExecuted();
+    double elapsedSeconds = durationSec; // We know how long we ran for
 
-    std::ofstream matchCsv("match_latencies.csv");
-    for (const auto& d : book.getMatchLatencies()) {
-        matchCsv << d.count() << "\n";
-    }
-    matchCsv.close();
+    std::cout << "\n--- Throughput ---" << std::endl;
+    std::cout << "Total Orders Processed: " << totalOrders << std::endl;
+    std::cout << "Total Trades Executed:  " << totalTrades << std::endl;
+    std::cout << "Orders per Second (OPS): " << std::fixed << std::setprecision(2) << (totalOrders / elapsedSeconds) << std::endl;
+    std::cout << "Trades per Second (TPS): " << std::fixed << std::setprecision(2) << (totalTrades / elapsedSeconds) << std::endl;
+    std::cout << "------------------\n" << std::endl;
+
+    auto addLatencies = book.getAddLatencies();
+    auto matchLatencies = book.getMatchLatencies();
+
+    Metrics::LatencyStats addStats = Metrics::calculateLatencyStats(addLatencies);
+    Metrics::LatencyStats matchStats = Metrics::calculateLatencyStats(matchLatencies);
+
+    Metrics::printLatencyStats(std::cout, "Add Order", addStats);
+    Metrics::printLatencyStats(std::cout, "Match Operation", matchStats);
+
+    // Log latencies to CSV for plotting
+    // std::ofstream addCsv("add_latencies.csv");
+    // for (const auto& d : book.getAddLatencies()) {
+    //     addCsv << d.count() << "\n";
+    // }
+    // addCsv.close();
+
+    // std::ofstream matchCsv("match_latencies.csv");
+    // for (const auto& d : book.getMatchLatencies()) {
+    //     matchCsv << d.count() << "\n";
+    // }
+    // matchCsv.close();
 
     std::cout << "Latencies logged to add_latencies.csv and match_latencies.csv. Use plot_latencies.py to visualize.\n";
     
