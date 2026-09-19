@@ -1,59 +1,4 @@
-Limit Order Book Simulator
-A C++-based simulator for a financial exchange's limit order book, demonstrating low-latency order processing, multi-threading, and real-time visualization.
-Features
-
-Random Order Generation: Generates BUY/SELL limit orders every t milliseconds (configurable).
-Pre-loading: Populates book with N random orders before market opens.
-Threading: Three threads for generating orders, matching trades, and displaying the book.
-Visualization: Console-based table of top 5 bid/ask levels, last trade, and average add/match latencies (in microseconds).
-Extensibility: Order type enum supports adding new types (e.g., market orders).
-Performance: Tracks and displays average latencies for order adds and matches.
-Priority Queue Processing: Uses map for sorted price levels and lists for FIFO orders per level, optimizing for low latency (O(log L) inserts where L=price levels).
-Throughput Metrics: Orders/sec and trades/sec displayed in real-time.
-Latency Plotting: Logs latencies to CSV; use provided Python script to plot.
-
-Build Instructions
-mkdir build && cd build
-cmake ..
-make
-
-Usage
-Run with optional arguments:
-
-Number of pre-loaded orders (default: 100)
-Order generation interval in ms (default: 100)
-Simulation duration in seconds (default: 60)
-
-Example:
-./simulator 200 50 30
-
-
-Pre-loads 200 orders, generates new orders every 50ms, runs for 30s.
-
-Plotting Latencies
-After running, use the provided plot_latencies.py (requires Python with matplotlib):
-python plot_latencies.py
-
-
-Generates "latencies.png" showing add/match latencies over operations.
-
-Output
-Console shows:
-
-Initial "Market opened" message.
-Periodic order book updates (every 500ms): top 5 bids/asks, last trade, totals, throughput, avg latencies.
-Final metrics and CSV logs at end.
-
-Future Extensions
-
-Add market orders or iceberg orders via Order::Type.
-Support file-based order input (e.g., parse "BUY 100 shares @ $50").
-Implement risk checks (e.g., balance limits).
-Log trades to file for analysis.
-
-//
-
-# High-Performance C++ Order Book Simulation
+# C++ Order Book Simulation
 
 This project is a multi-threaded simulation of a limit order book (LOB), designed to model the core functionality of a financial exchange's matching engine. It is written in modern C++ and focuses on performance, correctness, and realistic simulation of market dynamics.
 
@@ -69,17 +14,148 @@ The primary goal is to provide a framework for measuring and analyzing the laten
     *   **Latency Distribution**: Calculates average, median (p50), p90, p99, p99.9, and max latencies for critical operations (adding an order, executing a match). This is crucial for understanding tail latency behavior.
 *   **Data Visualization**: Outputs latency data to CSV files, which can be visualized using the provided Python script (`plot_latencies.py`) to analyze performance over time.
 
+## How to Build and Run
+
+### Prerequisites
+*   A C++17 compliant compiler (`clang++` or `g++`)
+*   **CMake** (version 3.10+)
+*   **Make**
+*   **Python 3** with `matplotlib` (optional, for plotting latency charts)
+
+### 1. Build
+
+From the repository root directory:
+
+```bash
+# Create and navigate to the build directory
+mkdir -p build && cd build
+
+# Configure with CMake
+cmake ..
+
+# Build the executable
+make
+```
+
+This will produce the executable binary named **`simulator`** inside the `build/` directory.
+
+### 2. Run
+
+You can run the simulator directly from the root directory or from inside the `build/` directory.
+
+**From project root:**
+```bash
+./build/simulator [pre_orders] [duration_s]
+```
+
+**From the `build/` directory:**
+```bash
+./simulator [pre_orders] [duration_s]
+```
+
+#### CLI Parameters Explained
+
+The simulator accepts optional positional arguments:
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `pre_orders` | Integer | `10000` | **Initial Order Book Depth**: The number of realistic random orders pre-loaded and matched *before* opening the market. This populates both bid and ask queues around the mid-price so the simulation starts with realistic liquidity. |
+| `duration_s` | Integer | `30` | **Simulation Duration**: The number of seconds the real-time order generation and matching engine thread will run before shutting down and printing throughput and latency percentiles. |
+
+#### Run Command Examples
+
+*   **Run with Defaults** (10,000 pre-loaded orders, runs for 30 seconds):
+    ```bash
+    ./build/simulator
+    ```
+
+*   **Quick Test Run** (1,000 pre-loaded orders, runs for 5 seconds):
+    ```bash
+    ./build/simulator 1000 5
+    ```
+
+*   **Heavy Load Benchmark** (50,000 pre-loaded orders, runs for 60 seconds):
+    ```bash
+    ./build/simulator 50000 60
+    ```
+
+*   **Legacy 3-Argument Syntax**:
+    ```bash
+    ./build/simulator 10000 0 10
+    ```
+
+#### Sample Output
+
+When the run finishes, the engine outputs throughput metrics and nanosecond-level latency percentiles:
+
+```text
+Market opened with 1000 pre-loaded orders
+--- RUNNING IN SINGLE-THREADED BENCHMARK MODE ---
+Generator will run in real-time, and a single thread will process for 5 seconds.
+Simulation ended. Final book state shown above.
+
+--- Throughput (Engine-Only Active Time) ---
+Total Orders Processed:   3982410
+Total Trades Executed:    387120
+Active Engine Time:       2.314201 s (Wall-clock: 5.002130 s)
+Orders per Second (OPS):  1720857.44
+Trades per Second (TPS):  167280.20
+--------------------------------------------
+
+--- Add Order Latency (ns) ---
+Average: 489.12
+p50 (Median): 417
+p90: 625
+p99: 1375
+p99.9: 4500
+Max: 512083
+-------------------------
+--- Match Operation Latency (ns) ---
+Average: 1084.50
+p50 (Median): 958
+p90: 1083
+p99: 1750
+p99.9: 7250
+Max: 498333
+-------------------------
+```
+
+### 3. Visualize Latency (Optional)
+
+You can generate graphical latency plots over time:
+
+1. In [`src/main.cpp`](src/main.cpp), uncomment lines 100–111 to enable writing latencies to `add_latencies.csv` and `match_latencies.csv`.
+2. Recompile and run the simulator:
+   ```bash
+   make -C build
+   ./build/simulator 10000 5
+   ```
+3. Run the visualization script from the project root (using the provided virtual environment or any Python environment with `matplotlib`):
+   ```bash
+   source venv/bin/activate  # or: pip install matplotlib
+   python3 plot_latencies.py
+   ```
+   This will read the CSV files and generate **`latencies.png`**.
+
 ## Project Structure
 
 ```
 .
-├── Order.h/cpp          # Defines the basic Order struct.
-├── OrderBook.h/cpp      # The core matching engine logic and data structures.
-├── Utils.h/cpp          # Helper functions for generating realistic random orders.
-├── Metrics.h/cpp        # Utilities for calculating detailed latency statistics (p50, p99, etc.).
-├── main.cpp             # Main driver: sets up threads, runs the simulation, and reports final metrics.
+├── CMakeLists.txt       # CMake build configuration.
+├── include/             # C++ header files
+│   ├── Metrics.h        # Percentiles (p50, p90, p99, p99.9) and stats utilities.
+│   ├── Order.h          # Basic Order struct definition.
+│   ├── OrderBook.h      # Core matching engine and book data structures.
+│   └── Utils.h          # Helper functions for realistic random order generation.
+├── src/                 # C++ source files
+│   ├── Metrics.cpp
+│   ├── Order.cpp
+│   ├── OrderBook.cpp
+│   ├── Utils.cpp
+│   └── main.cpp         # Main benchmark driver and simulation orchestrator.
 ├── plot_latencies.py    # Python script to visualize latency data from CSV output.
-└── README.md            # This file.
+├── theory/              # In-depth architectural & theoretical documentation.
+└── README.md            # Project documentation and usage guide.
 ```
 
 ## Core Design and Data Structures
@@ -94,10 +170,6 @@ The heart of the project is the `OrderBook` class.
     *   **PriceLevel**: `struct` containing a `std::list<Order>` to maintain strict FIFO order for time priority.
     *   **Order Location Cache**: `std::unordered_map<int, OrderLocation>`
         *   Provides O(1) average-case lookup for fast order cancellations by mapping an `orderId` to an iterator in the corresponding price level's list.
-
-*   **Concurrency**:
-    *   A global `std::mutex` protects the order book data structures from concurrent access.
-    *   A `std::condition_variable` is used to signal the matcher thread efficiently, ensuring it only wakes up when a new order has been added, avoiding busy-waiting.
 
 ## Approach to Realism
 
@@ -123,36 +195,19 @@ The simulation reports key performance indicators upon completion:
 *   **Architectural Improvement**: The current global mutex is a known bottleneck. A production-grade system would replace this with a single-threaded matching core that processes orders from a lock-free queue, eliminating lock contention on the critical path entirely.
 *   **Data Structure Optimization**: For ultimate performance, the `std::map` could be replaced with a `std::vector` indexed by integer price ticks, changing price level lookups from `O(log N)` to `O(1)` and significantly improving cache locality.
 
-Rigorous Performance Measurement
+### Rigorous Performance Measurement
+
 The simulation includes a benchmark mode designed for rigorous performance analysis, addressing common pitfalls in latency measurement:
 
-Unthrottled Throughput Testing: In benchmark mode (./simulator ... benchmark), the order generator runs at maximum speed, revealing the true Orders Per Second (OPS) the engine can sustain. This generates millions of events required for statistically stable tail-latency analysis.
-Elimination of Measurement Noise: Latency timers are started after locks are acquired. This ensures that measurements reflect only the engine's processing time, excluding external factors like I/O blocking or thread scheduling waits, which previously caused a pathologically large latency tail.
-Realistic Workload Generation: The order generator has been enhanced to model a mean-reverting price walk and generate a realistic mix of small, passive "maker" orders and larger, aggressive "taker" orders. This creates a balanced and dynamic order book, preventing the artificial skew seen in simpler models and providing a more challenging and realistic test for the matching engine.
+*   **Unthrottled Throughput Testing**: In benchmark mode, the order generator runs at maximum speed in real-time, revealing the true Orders Per Second (OPS) the engine can sustain. This generates millions of events required for statistically stable tail-latency analysis.
+*   **Elimination of Measurement Noise**: Latency timers measure active matching engine operations directly, excluding external factors like I/O blocking or thread scheduling waits.
+*   **Realistic Workload Generation**: The order generator has been enhanced to model a mean-reverting price walk and generate a realistic mix of small, passive "maker" orders and larger, aggressive "taker" orders. This creates a balanced and dynamic order book, providing a challenging and realistic test for the matching engine.
 
-Understanding Tail Latency
-In benchmark mode, the engine can process millions of orders per second. The latency profile shows a median (p50) add time in the hundreds of nanoseconds, which is consistent with the expected performance of std::map on modern hardware.
+### Understanding Tail Latency
+
+In benchmark mode, the engine can process millions of orders per second. The latency profile shows a median (p50) add time in the hundreds of nanoseconds, which is consistent with the expected performance of `std::map` on modern hardware.
 
 However, a significant tail latency is observed (e.g., p99.9 and max values can be orders of magnitude higher). This is a well-understood artifact of the underlying data structures:
 
-Cause: The extreme outliers are caused by heap allocations when std::map needs to create a new price level for the first time. This involves a call to the system's memory allocator (malloc/new), which can trigger expensive operations like requesting memory pages from the OS kernel, leading to a multi-millisecond stall.
-Implication: While most operations are fast (inserting into an existing price level), the cost of creating new levels dominates the tail. A production system would mitigate this by using custom memory allocators (pool allocators) or by pre-allocating a fixed-size data structure (like a std::vector indexed by price ticks) to eliminate dynamic allocations on the critical path entirely.
-
-## How to Build and Run
-
-1.  **Build**:
-    ```bash
-    mkdir build && cd build
-    cmake ..
-    make
-    ```
-2.  **Run**:
-    ```bash
-    ./OrderBookSim [pre_orders] [interval_ms] [duration_s]
-    # Example: 1000 pre-orders, new order every 10ms, run for 30s
-    ./OrderBookSim 1000 10 30
-    ```
-3.  **Visualize**:
-    ```bash
-    python3 ../plot_latencies.py
-    ```
+*   **Cause**: The extreme outliers are caused by heap allocations when `std::map` needs to create a new price level for the first time. This involves a call to the system's memory allocator (`malloc`/`new`), which can trigger expensive operations like requesting memory pages from the OS kernel, leading to a multi-millisecond stall.
+*   **Implication**: While most operations are fast (inserting into an existing price level), the cost of creating new levels dominates the tail. A production system would mitigate this by using custom memory allocators (pool allocators) or by pre-allocating a fixed-size data structure (like a `std::vector` indexed by price ticks) to eliminate dynamic allocations on the critical path entirely.
